@@ -175,7 +175,8 @@ When using an HTML/CSS\-to\-PDF\-engine, \f[C]\-\-css\f[] affects the
 output.
 If \f[C]wkhtmltopdf\f[] is used, then the variables
 \f[C]margin\-left\f[], \f[C]margin\-right\f[], \f[C]margin\-top\f[],
-\f[C]margin\-bottom\f[], and \f[C]papersize\f[] will affect the output.
+\f[C]margin\-bottom\f[], \f[C]footer\-html\f[], \f[C]header\-html\f[]
+and \f[C]papersize\f[] will affect the output.
 .PP
 To debug the PDF creation, it can be useful to look at the intermediate
 representation: instead of \f[C]\-o\ test.pdf\f[], use for example
@@ -2741,7 +2742,7 @@ Here \f[C]mycode\f[] is an identifier, \f[C]haskell\f[] and
 with value \f[C]100\f[].
 Some output formats can use this information to do syntax highlighting.
 Currently, the only output formats that uses this information are HTML,
-LaTeX, Docx, and Ms.
+LaTeX, Docx, Ms, and PowerPoint.
 If highlighting is supported for your output format and language, then
 the code block above will appear highlighted, with numbered lines.
 (To see which languages are supported, type
