@@ -273,10 +273,11 @@ tests = [ testGroup "block elements"
                       ]
             , "table with header and caption" =:
               let caption = text "Table 1"
+                  specs = [(AlignDefault, 0), (AlignDefault, 0)]
                   headers = [plain $ text "header 1", plain $ text "header 2"]
                   rows = [[para $ text "Para 1.1", para $ text "Para 1.2"]
                          ,[para $ text "Para 2.1", para $ text "Para 2.2"]]
-              in table caption mempty headers rows
+              in table caption specs headers rows 
               =?> unlines [ " header 1 || header 2"
                           , " Para 1.1 |  Para 1.2"
                           , " Para 2.1 |  Para 2.2"
