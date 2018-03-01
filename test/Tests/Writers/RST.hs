@@ -114,4 +114,12 @@ tests = [ testGroup "rubrics"
               , "Header 2"
               , "--------"]
           ]
+        , testGroup "properly escaping paragraphs starting like"
+          [ "ordered lists" =:
+            para (str "A)" <> space <> str "text") =?>
+            "\\A) text"
+          , "unordered lists" =:
+            para (str "- " <> space <> str "text") =?>
+            "\\- text"
+          ]
         ]
