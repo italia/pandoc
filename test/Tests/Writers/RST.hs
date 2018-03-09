@@ -55,6 +55,10 @@ tests = [ testGroup "rubrics"
             plain (strong (str "")) =?> ""
           , "do not cause the introduction of extra spaces when removed" =:
             plain (strong (str "") <> emph (str "text")) =?> "*text*"
+          , "get terminal spaces removed" =:
+            strong (space <> str "text" <> space <> space) =?> "**text**"
+          , "get internal spaces removed when needed" =:
+            strong (strong (str "") <> space <> strong (str "")) =?> ""
           ]
         , testGroup "headings"
           [ "normal heading" =:
