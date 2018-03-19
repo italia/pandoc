@@ -364,6 +364,7 @@ instance ToLuaStack ReaderOptions where
           (abbreviations         :: Set.Set String)
           (defaultImageExtension :: String)
           (trackChanges          :: TrackChanges)
+          (fontAttributes        :: Bool)
           (stripComments         :: Bool)
           = ro
     Lua.newtable
@@ -375,4 +376,5 @@ instance ToLuaStack ReaderOptions where
     LuaUtil.addValue "abbreviations" abbreviations
     LuaUtil.addValue "defaultImageExtension" defaultImageExtension
     LuaUtil.addValue "trackChanges" trackChanges
+    LuaUtil.addValue "fontAttributes" fontAttributes
     LuaUtil.addValue "stripComments" stripComments
