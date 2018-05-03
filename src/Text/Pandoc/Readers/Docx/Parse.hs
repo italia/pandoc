@@ -729,20 +729,25 @@ getTitleAndAlt ns element =
       alt = fromMaybe "" (mbDocPr >>= findAttrByName ns "" "descr")
   in (title, alt)
 
+drawingElemToDrawing :: NameSpaces -> Element -> Element -> D Drawing
+drawingElemToDrawing ns element picElem =
+  let (title, alt) = getTitleAndAlt ns element
+      a_ns = "http://schemas.openxmlformats.org/drawingml/2006/main"
+      drawing = findElement (QName "blip" (Just a_ns) (Just "a")) picElem
+                >>= findAttr (QName "embed" (lookup "r" ns) (Just "r"))
+  in
+    case drawing of
+      Just s -> expandDrawingId s >>=
+                (\(fp, bs) -> return $ Drawing fp title alt bs $ elemToExtent element)
+      Nothing -> throwError WrongElem
+
 elemToParPart :: NameSpaces -> Element -> D ParPart
 elemToParPart ns element
   | isElem ns "w" "r" element
   , Just drawingElem <- findChildByName ns "w" "drawing" element
   , pic_ns <- "http://schemas.openxmlformats.org/drawingml/2006/picture"
   , Just picElem <- findElement (QName "pic" (Just pic_ns) (Just "pic")) drawingElem
-  = let (title, alt) = getTitleAndAlt ns drawingElem
-        a_ns = "http://schemas.openxmlformats.org/drawingml/2006/main"
-        drawing = findElement (QName "blip" (Just a_ns) (Just "a")) picElem
-                  >>= findAttrByName ns "r" "embed"
-    in
-     case drawing of
-       Just s -> expandDrawingId s >>= (\(fp, bs) -> return $ PartDrawing $ Drawing fp title alt bs $ elemToExtent drawingElem)
-       Nothing -> throwError WrongElem
+  = PartDrawing <$> drawingElemToDrawing ns element picElem
 -- The below is an attempt to deal with images in deprecated vml format.
 elemToParPart ns element
   | isElem ns "w" "r" element
@@ -900,21 +905,12 @@ elemToExtent drawingElem =
       getDim at = findElement (QName "extent" (Just wp_ns) (Just "wp")) drawingElem
                     >>= findAttr (QName at Nothing Nothing) >>= safeRead
 
-
 childElemToRun :: NameSpaces -> Element -> D Run
 childElemToRun ns element
   | isElem ns "w" "drawing" element
   , pic_ns <- "http://schemas.openxmlformats.org/drawingml/2006/picture"
   , Just picElem <- findElement (QName "pic" (Just pic_ns) (Just "pic")) element
-  = let (title, alt) = getTitleAndAlt ns element
-        a_ns = "http://schemas.openxmlformats.org/drawingml/2006/main"
-        drawing = findElement (QName "blip" (Just a_ns) (Just "a")) picElem
-                  >>= findAttr (QName "embed" (lookup "r" ns) (Just "r"))
-    in
-     case drawing of
-       Just s -> expandDrawingId s >>=
-                 (\(fp, bs) -> return $ InlineDrawing $ Drawing fp title alt bs $ elemToExtent element)
-       Nothing -> throwError WrongElem
+  = InlineDrawing <$> drawingElemToDrawing ns element picElem
 childElemToRun ns element
   | isElem ns "w" "drawing" element
   , c_ns <- "http://schemas.openxmlformats.org/drawingml/2006/chart"

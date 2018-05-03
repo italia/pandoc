@@ -2,6 +2,7 @@
 {-# LANGUAGE CPP               #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards     #-}
+{-# LANGUAGE NamedFieldPuns    #-}
 {-
 Copyright (C) 2014-2018 Jesse Rosenthal <jrosenthal@jhu.edu>
 
@@ -242,6 +243,11 @@ runToString :: Run -> String
 runToString (Run _ runElems) = concatMap runElemToString runElems
 runToString _                = ""
 
+drawingToImage :: PandocMonad m => Drawing -> DocxContext m Inlines
+drawingToImage Drawing {drawingPath, drawingTitle, drawingAlt, drawingBytes, drawingExtent} = do
+  (lift . lift) $ P.insertMedia drawingPath Nothing drawingBytes
+  return $ imageWith (extentToAttr drawingExtent) drawingPath drawingTitle $ text drawingAlt
+
 parPartToString :: ParPart -> String
 parPartToString (PlainRun run)             = runToString run
 parPartToString (InternalHyperLink _ runs) = concatMap runToString runs
@@ -339,9 +345,7 @@ runToInlines (Footnote bps) = do
 runToInlines (Endnote bps) = do
   blksList <- smushBlocks <$> mapM bodyPartToBlocks bps
   return $ note blksList
-runToInlines (InlineDrawing (Drawing fp title alt bs ext)) = do
-  (lift . lift) $ P.insertMedia fp Nothing bs
-  return $ imageWith (extentToAttr ext) fp title $ text alt
+runToInlines (InlineDrawing drawing) = drawingToImage drawing
 runToInlines InlineChart = return $ spanWith ("", ["chart"], []) $ text "[CHART]"
 
 extentToAttr :: Extent -> Attr
@@ -449,9 +453,7 @@ parPartToInlines' (BookMark _ anchor) =
         unless inHdrBool
           (modify $ \s -> s { docxAnchorMap = M.insert anchor newAnchor anchorMap})
         return $ spanWith (newAnchor, ["anchor"], []) mempty
-parPartToInlines' (PartDrawing (Drawing fp title alt bs ext)) = do
-  (lift . lift) $ P.insertMedia fp Nothing bs
-  return $ imageWith (extentToAttr ext) fp title $ text alt
+parPartToInlines' (PartDrawing drawing) = drawingToImage drawing
 parPartToInlines' Chart =
   return $ spanWith ("", ["chart"], []) $ text "[CHART]"
 parPartToInlines' (InternalHyperLink anchor runs) = do
