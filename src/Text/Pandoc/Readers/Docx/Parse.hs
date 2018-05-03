@@ -42,6 +42,7 @@ module Text.Pandoc.Readers.Docx.Parse ( Docx(..)
                                       , ParPart(..)
                                       , Run(..)
                                       , RunElem(..)
+                                      , Drawing(..)
                                       , Notes
                                       , Numbering
                                       , Relationship
@@ -269,6 +270,13 @@ data Cell = Cell [BodyPart]
 -- (width, height) in EMUs
 type Extent = Maybe (Double, Double)
 
+data Drawing = Drawing { drawingPath :: FilePath
+                       , drawingTitle :: String
+                       , drawingAlt :: String
+                       , drawingBytes :: B.ByteString
+                       , drawingExtent :: Extent
+                       } deriving Show
+
 data ParPart = PlainRun Run
              | ChangedRuns TrackedChange [Run]
              | CommentStart CommentId Author CommentDate [BodyPart]
@@ -276,7 +284,7 @@ data ParPart = PlainRun Run
              | BookMark BookMarkId Anchor
              | InternalHyperLink Anchor [Run]
              | ExternalHyperLink URL [Run]
-             | Drawing FilePath String String B.ByteString Extent -- title, alt
+             | PartDrawing Drawing
              | Chart                                              -- placeholder for now
              | PlainOMath [Exp]
              | Field FieldInfo [Run]
@@ -287,7 +295,7 @@ data ParPart = PlainRun Run
 data Run = Run RunStyle [RunElem]
          | Footnote [BodyPart]
          | Endnote [BodyPart]
-         | InlineDrawing FilePath String String B.ByteString Extent -- title, alt
+         | InlineDrawing Drawing
          | InlineChart          -- placeholder
            deriving Show
 
@@ -733,7 +741,7 @@ elemToParPart ns element
                   >>= findAttrByName ns "r" "embed"
     in
      case drawing of
-       Just s -> expandDrawingId s >>= (\(fp, bs) -> return $ Drawing fp title alt bs $ elemToExtent drawingElem)
+       Just s -> expandDrawingId s >>= (\(fp, bs) -> return $ PartDrawing $ Drawing fp title alt bs $ elemToExtent drawingElem)
        Nothing -> throwError WrongElem
 -- The below is an attempt to deal with images in deprecated vml format.
 elemToParPart ns element
@@ -744,7 +752,7 @@ elemToParPart ns element
     in
      case drawing of
        -- Todo: check out title and attr for deprecated format.
-       Just s -> expandDrawingId s >>= (\(fp, bs) -> return $ Drawing fp "" "" bs Nothing)
+       Just s -> expandDrawingId s >>= (\(fp, bs) -> return $ PartDrawing $ Drawing fp "" "" bs Nothing)
        Nothing -> throwError WrongElem
 -- Chart
 elemToParPart ns element
@@ -905,7 +913,7 @@ childElemToRun ns element
     in
      case drawing of
        Just s -> expandDrawingId s >>=
-                 (\(fp, bs) -> return $ InlineDrawing fp title alt bs $ elemToExtent element)
+                 (\(fp, bs) -> return $ InlineDrawing $ Drawing fp title alt bs $ elemToExtent element)
        Nothing -> throwError WrongElem
 childElemToRun ns element
   | isElem ns "w" "drawing" element

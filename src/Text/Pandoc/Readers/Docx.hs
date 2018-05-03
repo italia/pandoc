@@ -339,7 +339,7 @@ runToInlines (Footnote bps) = do
 runToInlines (Endnote bps) = do
   blksList <- smushBlocks <$> mapM bodyPartToBlocks bps
   return $ note blksList
-runToInlines (InlineDrawing fp title alt bs ext) = do
+runToInlines (InlineDrawing (Drawing fp title alt bs ext)) = do
   (lift . lift) $ P.insertMedia fp Nothing bs
   return $ imageWith (extentToAttr ext) fp title $ text alt
 runToInlines InlineChart = return $ spanWith ("", ["chart"], []) $ text "[CHART]"
@@ -449,7 +449,7 @@ parPartToInlines' (BookMark _ anchor) =
         unless inHdrBool
           (modify $ \s -> s { docxAnchorMap = M.insert anchor newAnchor anchorMap})
         return $ spanWith (newAnchor, ["anchor"], []) mempty
-parPartToInlines' (Drawing fp title alt bs ext) = do
+parPartToInlines' (PartDrawing (Drawing fp title alt bs ext)) = do
   (lift . lift) $ P.insertMedia fp Nothing bs
   return $ imageWith (extentToAttr ext) fp title $ text alt
 parPartToInlines' Chart =
