@@ -298,6 +298,10 @@ tests = [ testGroup "inlines"
             "dropcap paragraphs"
             "docx/drop_cap.docx"
             "docx/drop_cap.native"
+          , testCompare
+            "figures with styled paragraphs"
+            "docx/figure-styled-paragraph.docx"
+            "docx/figure-styled-paragraph.native"
           ]
         , testGroup "track changes"
           [ testCompare
