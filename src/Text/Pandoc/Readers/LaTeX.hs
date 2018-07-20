@@ -286,8 +286,14 @@ rawLaTeXBlock :: (PandocMonad m, HasMacros s, HasReaderOptions s)
 rawLaTeXBlock = do
   lookAhead (try (char '\\' >> letter))
   snd <$> (rawLaTeXParser False macroDef blocks
+      <|> (rawLaTeXParser True
+             (do choice (map controlSeq
+                   ["include", "input", "subfile", "usepackage"])
+                 skipMany opt
+                 braced
+                 return mempty) blocks)
       <|> rawLaTeXParser True
-           (environment <|> macroDef <|> blockCommand)
+           (environment <|> blockCommand)
            (mconcat <$> (many (block <|> beginOrEndCommand))))
 
 -- See #4667 for motivation; sometimes people write macros
@@ -308,7 +314,10 @@ rawLaTeXInline :: (PandocMonad m, HasMacros s, HasReaderOptions s)
                => ParserT String s m String
 rawLaTeXInline = do
   lookAhead (try (char '\\' >> letter))
-  snd <$> rawLaTeXParser True (inlineEnvironment <|> inlineCommand') inlines
+  snd <$> (  rawLaTeXParser True
+              (mempty <$ (controlSeq "input" >> skipMany opt >> braced))
+              inlines
+        <|> rawLaTeXParser True (inlineEnvironment <|> inlineCommand') inlines)
 
 inlineCommand :: PandocMonad m => ParserT String ParserState m Inlines
 inlineCommand = do
