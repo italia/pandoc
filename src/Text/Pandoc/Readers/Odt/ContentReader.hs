@@ -516,9 +516,7 @@ type BlockMatcher  = ElementMatcher Blocks
 
 --
 matchingElement :: (Monoid e)
-                => Namespace -> ElementName
-                -> OdtReaderSafe  e e
-                -> ElementMatcher e
+       => Namespace -> ElementName -> OdtReaderSafe  e e -> ElementMatcher e
 matchingElement ns name reader = (ns, name, asResultAccumulator reader)
   where
    asResultAccumulator :: (ArrowChoice a, Monoid m) => a m m -> a m (Fallible m)
@@ -618,6 +616,29 @@ read_paragraph    = matchingElement NsText "p"
                                         , read_text_seq
                                         ] read_plain_text
 
+read_header_paragraph :: BlockMatcher
+read_header_paragraph = proc x -> do
+    fStyle <- readStyleByName -< ()
+    case fStyle of
+      Right ("Table_20_header", _) -> matchingElement NsText "p"
+                    $ constructPara
+                    $ liftA para
+                    $ withNewStyle
+                    $ matchChildContent [ read_span
+                                        , read_spaces
+                                        , read_line_break
+                                        , read_link
+                                        , read_note
+                                        , read_citation
+                                        , read_bookmark
+                                        , read_bookmark_start
+                                        , read_reference_start
+                                        , read_bookmark_ref
+                                        , read_reference_ref
+                                        , read_maybe_nested_img_frame
+                                        , read_text_seq
+                                        ] read_plain_text -< x
+      _ -> failingOdtReader
 
 ----------------------
 -- Headers
@@ -728,7 +749,8 @@ read_citation     = matchingElement NsText "bibliography-mark"
 read_table        :: BlockMatcher
 read_table         = matchingElement NsTable "table"
                      $ liftA simpleTable'
-                     $ matchChildContent'  [ read_table_row
+                     $ matchChildContent'  [ read_table_row,
+                                             read_table_header
                                            ]
 
 -- | A simple table without a caption or headers
@@ -737,6 +759,19 @@ simpleTable' :: [[Blocks]] -> Blocks
 simpleTable' []         = simpleTable [] []
 simpleTable' (x : rest) = simpleTable (fmap (const defaults) x) (x : rest)
   where defaults = fromList []
+
+--
+read_table_header :: ElementMatcher [[Blocks]]
+read_table_header = matchingElement NsTable "table-row"
+                    $ liftA (:[])
+                    $ matchChildContent'  [ read_table_header_cell
+                                          ]
+--
+read_table_header_cell :: ElementMatcher [Blocks]
+read_table_header_cell = matchingElement NsTable "table-cell"
+                         $ liftA (compactify.(:[]))
+                         $ matchChildContent' [ read_header_paragraph
+                                              ]
 
 --
 read_table_row    :: ElementMatcher [[Blocks]]
