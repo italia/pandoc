@@ -66,6 +66,8 @@ import Text.Pandoc.Readers.Odt.Generic.XMLConverter
 
 import qualified Data.Set as Set
 
+import Data.Sequence ((|>), viewr, viewl, ViewR(..), ViewL(..))
+
 --------------------------------------------------------------------------------
 -- State
 --------------------------------------------------------------------------------
@@ -99,7 +101,14 @@ data ReaderState
   deriving ( Show )
 
 readerState :: Styles -> Media -> ReaderState
-readerState styles media = ReaderState styles [] 0 Nothing M.empty media mempty
+readerState styles media = ReaderState {
+                            styleSet = styles,
+                            styleTrace = [],
+                            currentListLevel = 0,
+                            currentListStyle = Nothing,
+                            bookmarkAnchors = M.empty,
+                            envMedia = media,
+                            odtMediaBag = mempty }
 
 --
 pushStyle'  :: Style -> ReaderState -> ReaderState
@@ -159,9 +168,7 @@ type OdtReaderSafe  a b = XMLReaderSafe ReaderState a b
 
 -- | Extract something from the styles
 fromStyles :: (a -> Styles -> b) -> OdtReaderSafe a b
-fromStyles f =     keepingTheValue
-                     (getExtraState >>^ styleSet)
-               >>% f
+fromStyles f = keepingTheValue (getExtraState >>^ styleSet) >>% f
 
 --
 getStyleByName :: OdtReader StyleName Style
@@ -310,8 +317,10 @@ withNewStyle a = proc x -> do
     Left _         -> a -< x
   where
     isCodeStyle :: StyleName -> Bool
-    isCodeStyle "Source_Text" = True
-    isCodeStyle _             = False
+    isCodeStyle = (flip elem) ["Source_Text",
+                               -- Source_20_Text is available in
+                               -- Libreoffice 5 for styling inlines
+                               "Source_20_Text"]
 
     inlineCode :: Inlines -> Inlines
     inlineCode = code . intercalate "" . map stringify . toList
@@ -549,23 +558,48 @@ matchChildContent ls fallback = returnV mempty >>> matchContent ls fallback
 --
 -- | Open Document allows several consecutive spaces if they are marked up
 read_plain_text :: OdtReaderSafe (Inlines, XML.Content) Inlines
-read_plain_text =  fst ^&&& read_plain_text' >>% recover
+read_plain_text = proc x -> do
+  fst ^&&& read_plain_text' >>% recover -<< x
   where
     -- fallible version
     read_plain_text' :: OdtReader (Inlines, XML.Content) Inlines
-    read_plain_text' =      (     second ( arr extractText )
-                              >>^ spreadChoice >>?! second text
-                            )
-                       >>?% mappend
+    read_plain_text' =
+      ( second ( arr extractText ) >>^ spreadChoice >>?! second text )
+      >>?% mappend
     --
     extractText     :: XML.Content -> Fallible String
     extractText (XML.Text cData) = succeedWith (XML.cdData cData)
     extractText         _        = failEmpty
 
+-- this is a customised copy of the <> operator for Inlines, defined
+-- in pandoc-types:Text.Pandoc.Builder. Here i removed the `case`
+-- branches that were collapsing multiple spaces and those that were
+-- removing spaces after line breaks. We want to keep them for when we
+-- are converting a code block, and indentation becomes meaningful
+mappendPreserve :: Many Inline -> Many Inline -> Many Inline
+mappendPreserve (Many xs) (Many ys) =
+    case (viewr xs, viewl ys) of
+      (EmptyR, _) -> Many ys
+      (_, EmptyL) -> Many xs
+      (xs' :> x, y :< ys') -> Many (meld <> ys')
+        where meld = case (x, y) of
+                          (Space, SoftBreak) -> xs' |> SoftBreak
+                          (Str t1, Str t2)   -> xs' |> Str (t1 <> t2)
+                          (Emph i1, Emph i2) -> xs' |> Emph (i1 <> i2)
+                          (Strong i1, Strong i2) -> xs' |> Strong (i1 <> i2)
+                          (Subscript i1, Subscript i2) -> xs' |> Subscript (i1 <> i2)
+                          (Superscript i1, Superscript i2) -> xs' |> Superscript (i1 <> i2)
+                          (Strikeout i1, Strikeout i2) -> xs' |> Strikeout (i1 <> i2)
+                          (Space, LineBreak) -> xs' |> LineBreak
+                          (SoftBreak, LineBreak) -> xs' |> LineBreak
+                          (LineBreak, SoftBreak) -> xs' |> LineBreak
+                          (SoftBreak, SoftBreak) -> xs' |> SoftBreak
+                          _                  -> xs' |> x |> y
+
+
 read_text_seq :: InlineMatcher
 read_text_seq  = matchingElement NsText "sequence"
                  $ matchChildContent [] read_plain_text
-
 
 -- specifically. I honor that, although the current implementation of 'mappend'
 -- for 'Inlines' in "Text.Pandoc.Builder" will collapse them again.
@@ -597,6 +631,31 @@ read_span         = matchingElement NsText "span"
                                         , read_reference_ref
                                         ] read_plain_text
 
+read_code :: BlockMatcher
+read_code = matchingElement NsText "p" $ read_code_block
+
+read_code_block :: OdtReaderSafe (Inlines, XML.Content) Block
+read_code_block = liftA codeBlock $ read_code_text
+
+read_code_text :: OdtReaderSafe (Inlines, XML.Content) String
+read_code_text = proc x -> do
+  fst ^&&& read_code_text' >>% recover -<< x
+  where
+    -- fallible version
+    read_code_text' :: OdtReader (Inlines, XML.Content) String
+    read_code_text' = proc x -> do
+      fStyle <- readStyleByName -< x
+      case fStyle of
+        -- `Preformatted_20_Text` is available in Libreoffice 5 for
+        -- styling paragraphs
+        Right ("Preformatted_20_Text", _) ->
+          ((second (arr extractText) >>^ spreadChoice) >>?% mappend) -< x
+        _    -> arr $ const failEmpty -< ()
+    --
+    extractText :: XML.Content -> Fallible String
+    extractText (XML.Text cData) = succeedWith (XML.cdData cData)
+    extractText         _        = failEmpty
+
 --
 read_paragraph   :: BlockMatcher
 read_paragraph    = matchingElement NsText "p"
@@ -625,8 +684,7 @@ read_paragraph    = matchingElement NsText "p"
 
 --
 read_header      :: BlockMatcher
-read_header       = matchingElement NsText "h"
-                    $  proc blocks -> do
+read_header       = matchingElement NsText "h" $  proc blocks -> do
   level    <- ( readAttrWithDefault NsText "outline-level" 1
               ) -< blocks
   children <- ( matchChildContent [ read_span
@@ -899,6 +957,7 @@ read_reference_ref = matchingElement NsText "reference-ref"
 
 read_text :: OdtReaderSafe _x Pandoc
 read_text = matchChildContent' [ read_header
+                               , read_code
                                , read_paragraph
                                , read_list
                                , read_table
