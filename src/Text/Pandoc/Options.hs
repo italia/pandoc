@@ -74,6 +74,7 @@ data ReaderOptions = ReaderOptions{
        , readerAbbreviations         :: Set.Set String -- ^ Strings to treat as abbreviations
        , readerDefaultImageExtension :: String -- ^ Default extension for images
        , readerTrackChanges          :: TrackChanges -- ^ Track changes setting for docx
+       , readerFontAttributes        :: Bool -- ^ Parse fonts as Attrs
        , readerStripComments         :: Bool -- ^ Strip HTML comments instead of parsing as raw HTML
 } deriving (Show, Read, Data, Typeable, Generic)
 
@@ -90,6 +91,7 @@ instance Default ReaderOptions
                , readerAbbreviations         = defaultAbbrevs
                , readerDefaultImageExtension = ""
                , readerTrackChanges          = AcceptChanges
+               , readerFontAttributes        = False
                , readerStripComments         = False
                }
 
